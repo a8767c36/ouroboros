@@ -1,0 +1,128 @@
+<style>
+html, body { overflow: hidden; }
+canvas { position: absolute; top: 0; left: 0; z-index: -1; }
+</style>
+<script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
+<script type="module">
+let exp = Math.exp;
+
+class WeighterNeuron {
+	constructor (input, weights, m = 0, s = 1, t = 1) {
+		this.value = 0;
+		this.input = input;
+		this.weights = weights;
+		this.m = m;
+		this.s = s;
+		this.t = t;
+	}
+
+	tick (t) {
+		let x = 0;
+		for (let key in this.weights) {
+			x += this.input[key].value * this.weights[key];
+		}
+		let y = sigmoid(x, this.m, this.s);
+		t = t / this.t;
+		this.value = exp(-t) * this.value  +  (1 - exp(-t)) * y;
+	}
+}
+
+function sigmoid (x, m = 0, s = 1) {
+	x = (x - m) / s;
+	return exp(x) / (1 + exp(x));
+}
+
+class NeuronNetwork {
+	constructor (neurons = Object.create(null)) {
+		this.neurons = neurons;
+	}
+
+	tick (t) {
+		for (let key in this.neurons) {
+			this.neurons[key].tick(t);
+		}
+	}
+}
+
+let canvas = document.createElement('canvas');
+let ctx    = canvas.getContext('2d');
+
+let net = null;
+function init (net_) {
+	net = net_;
+}
+
+function draw () {
+	ctx.clearRect(0, 0, canvas.width, canvas.height);
+	ctx.fillStyle = 'black';
+	ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+	for (let neuron of Object.values(net.neurons)) {
+		let colorBias = Math.round(neuron.value*128);
+		ctx.fillStyle = `rgb(${127+colorBias},127,${127-colorBias})`;
+		ctx.beginPath();
+		ctx.arc(...getRealCoords(neuron.x, neuron.y), /*radius*/ 10 + neuron.value*20, 0, 2*Math.PI);
+		ctx.fill();
+		// console.log(neuron.x, neuron.y, neuron.value);
+	}
+}
+
+function getRealCoords (x, y) {
+	// maps virtual coords to real coords
+	let canvas_size = Math.sqrt(canvas.width * canvas.height);
+	return [canvas.width/2 + x * canvas_size/2, canvas.height/2 - y * canvas_size/2];
+}
+
+window.onload = async function () {
+	let net = new NeuronNetwork();
+	function addWeighterNeuron (name, weights, m,s,/*t,*/ extra, t=0.2) {
+		net.neurons[name] = new WeighterNeuron(net.neurons, weights, m,s,t);
+		Object.assign(net.neurons[name], extra);
+	}
+	net.neurons['button'] = {
+		value: 0,
+		tick (t) { }
+	};
+	Object.assign(net.neurons['button'], {x: -1, y: 0});
+	document.body.appendChild($('<input type="button">')
+		.val('Toggle')
+		.on('click', _ => net.neurons['button'].value = 1 - net.neurons['button'].value)
+		.get(0)
+	);
+	/*let baseWeights = {a: -0.2, b: -0.21, c: -0.2, d: -0.2, e: -0.2};
+	addWeighterNeuron('a', Object.assign(Object.create(baseWeights), {e:1.5, a:1, b:-1, button:1}), 0.7,0.1, {x:0,y:0.4});
+	addWeighterNeuron('b', Object.assign(Object.create(baseWeights), {a:1.5, b:1, c:-1}), 0.7,0.1, {x:0,y:0.2});
+	addWeighterNeuron('c', Object.assign(Object.create(baseWeights), {b:1.5, c:1, d:-1}), 0.7,0.1, {x:0,y:0.0});
+	addWeighterNeuron('d', Object.assign(Object.create(baseWeights), {c:1.5, d:1, e:-1}), 0.7,0.1, {x:0,y:-0.2});
+	addWeighterNeuron('e', Object.assign(Object.create(baseWeights), {d:1.5, e:1, a:-1}), 0.7,0.1, {x:0,y:-0.4});
+	*/
+	let baseWeights = { };
+	for (let i = 0; i < 20; i++) {
+		baseWeights[i] = -0.1;
+	}
+	for (let i = 0; i < 20; i++) {
+		let phi = 2*Math.PI*i/20;
+		addWeighterNeuron(i, Object.assign(Object.create(baseWeights), {[(i+19)%20]: 1.5, [i]: 1, [(i+1)%20]: -1}), 0.7, 0.1, {x: Math.cos(phi) * 0.8, y: Math.sin(phi) * 0.8});
+	}
+	net.neurons[0].value = 1;
+	net.neurons[0].weights['button'] = 2.5;
+	for (let i = 0; i < 40; i++) {
+		let phi = 2*Math.PI*Math.random();
+		addWeighterNeuron(Math.random(), Object.assign(Object.create(baseWeights), {[Math.floor((Math.random()*20)%20)]: 1.5, [Math.floor((Math.random()*20)%20)]: 1, [Math.floor((Math.random()*20)%20)]: -1}), 0.7, 0.1, {x: Math.cos(phi) * Math.random()*0.7, y: Math.sin(phi) * Math.random()*0.7});
+	}
+
+	document.body.appendChild(canvas);
+	init(net);
+
+	for (let now = new Date(); true; now = new Date()) {
+		await new Promise(fulfill => setTimeout(fulfill, 100));
+		net.tick((new Date - now) / 1000);
+		draw();
+	}
+};
+
+(window.onresize = function () {
+	canvas.width  = window.innerWidth;
+	canvas.height = window.innerHeight;
+})();
+</script>
